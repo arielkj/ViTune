@@ -131,12 +131,13 @@ import com.valentinilk.shimmer.LocalShimmerTheme
 import dev.kdrag0n.monet.theme.ColorScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.limitedParallelism
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.Executors
 
 private const val TAG = "MainActivity"
 private val coroutineScope = CoroutineScope(Dispatchers.IO)
@@ -538,14 +539,18 @@ class MainApplication : Application(), SingletonImageLoader.Factory, Configurati
         ServiceNotifications.createAll()
     }
 
+    // Car build: two small fixed thread pools so image fetching and
+    // decoding can never run more than 2 jobs in parallel. On the AC8227L
+    // radio the default Coil behaviour (many images decoding at once, each
+    // with an alpha animation) stalls scrolling; serialising the work
+    // keeps lists fluid.
+    private val imageFetchDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
+    private val imageDecodeDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
+
     override fun newImageLoader(context: PlatformContext) = ImageLoader.Builder(this)
-        // Car build: no crossfade and at most 2 image fetches/decodes in
-        // parallel. On the AC8227L radio the default Coil behaviour (many
-        // images decoding at once, each with an alpha animation) stalls
-        // scrolling; serialising the work keeps lists fluid.
         .crossfade(false)
-        .fetcherCoroutineContext(Dispatchers.IO.limitedParallelism(2))
-        .decoderCoroutineContext(Dispatchers.Default.limitedParallelism(2))
+        .fetcherCoroutineContext(imageFetchDispatcher)
+        .decoderCoroutineContext(imageDecodeDispatcher)
         .memoryCache {
             MemoryCache.Builder()
                 .maxSizePercent(context, 0.1)
