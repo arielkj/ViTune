@@ -54,7 +54,6 @@ android {
         abi {
             isEnable = true
             reset()
-            include("armeabi-v7a")
             isUniversalApk = false
         }
     }
