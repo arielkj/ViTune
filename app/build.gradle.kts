@@ -13,7 +13,12 @@ android {
     val appId = "${project.group}.android"
 
     namespace = appId
-    compileSdk = 37
+    // Car build: compileSdk/targetSdk 36 instead of 37. Google has not
+    // published the API 37 platform (no "platforms;android-37" in any
+    // sdkmanager channel), so the project cannot be built with 37 outside
+    // Android Studio's preview SDK. On the API 27 car radio this changes
+    // nothing at runtime.
+    compileSdk = 36
 
     // Car build: the target radio (ALPS Q91-A5-CPL, AutoChips AC8227L) is a
     // 32-bit ARMv7 device (armeabi-v7a). Building only that ABI keeps the
@@ -27,7 +32,7 @@ android {
         applicationId = appId
 
         minSdk = 24
-        targetSdk = 37
+        targetSdk = 36
 
         versionCode = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull() ?: 27
         versionName = project.version.toString()
