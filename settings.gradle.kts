@@ -23,10 +23,11 @@ pluginManagement {
     }
 }
 
-plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-}
-
+// Car build: the Foojay toolchain-resolver plugin was removed. It only
+// auto-downloads JDKs, and CI already installs JDK 25 via setup-java;
+// Gradle finds that toolchain through JAVA_HOME (see gradle.properties:
+// org.gradle.java.installations.fromEnv). Removing the plugin also avoids
+// a flaky resolution against the Gradle Plugin Portal at settings time.
 rootProject.name = "vitune"
 
 include(":app")
