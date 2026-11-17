@@ -177,7 +177,11 @@ composeCompiler {
 
 chaquopy {
     defaultConfig {
-        version = "3.14"
+        // Car build: Python 3.11, not 3.14. Chaquopy dropped the 32-bit
+        // ABIs (armeabi-v7a, x86) in Python 3.12 and later; only Python
+        // 3.11 and older ship an armeabi-v7a runtime, and the target radio
+        // (AC8227L) is 32-bit ARM. yt-dlp only needs Python 3.10+.
+        version = "3.11"
         pip {
             install("yt-dlp>=2026.10.26")
             install("yt-dlp-ejs>=0.8.0")
