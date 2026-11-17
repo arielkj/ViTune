@@ -787,6 +787,14 @@ interface DatabaseAccessor {
     @Delete
     fun delete(song: Song)
 
+    /**
+     * Car build: delete the songs that came from SAF folders.
+     * Used when a chosen folder is removed or rescanned; the pattern is
+     * "local:saf:<tree uri>/document/%" with LIKE metacharacters escaped.
+     */
+    @Query("DELETE FROM Song WHERE id LIKE :pattern ESCAPE '\\'")
+    fun deleteSongsLike(pattern: String)
+
     @Delete
     fun delete(searchQuery: SearchQuery)
 

@@ -111,6 +111,13 @@
     <string name="error_url">Can\'t open url %1$s</string>
     <string name="media_permission_declined">Permission declined, please grant media permissions in the settings of your device.</string>
     <string name="open_settings">Open settings</string>
+    <string name="retry_permission">Retry</string>
+    <string name="choose_music_folder">Choose music folder</string>
+    <string name="rescan_music">Rescan</string>
+    <string name="scanning_music">Searching for songs…</string>
+    <string name="no_music_folder">No folder chosen yet. Choose the folder with your music and it will appear here.</string>
+    <string name="folder_read_error">Could not read a folder. Check that it is still connected and try again.</string>
+    <string name="remove_folder">Remove</string>
     <string name="no_items_found">No items found</string>
     <string name="no_search_results">No results found. Please try a different query or category</string>
     <string name="no_browser_installed">Couldn\'t find an application to browse the internet</string>

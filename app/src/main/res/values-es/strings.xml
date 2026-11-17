@@ -111,6 +111,13 @@
     <string name="error_url">No se puede abrir la URL %1$s</string>
     <string name="media_permission_declined">Permiso denegado, por favor concede permisos de medios en la configuración de tu dispositivo.</string>
     <string name="open_settings">Abrir configuración</string>
+    <string name="retry_permission">Reintentar</string>
+    <string name="choose_music_folder">Elegir carpeta de música</string>
+    <string name="rescan_music">Volver a buscar</string>
+    <string name="scanning_music">Buscando canciones…</string>
+    <string name="no_music_folder">Aún no has elegido ninguna carpeta. Elige la carpeta con tu música y aparecerá aquí.</string>
+    <string name="folder_read_error">No se pudo leer una carpeta. Revisa que siga conectada e inténtalo de nuevo.</string>
+    <string name="remove_folder">Quitar</string>
     <string name="no_items_found">No se encontraron elementos</string>
     <string name="no_search_results">No se encontraron resultados. Por favor, intenta con una consulta o categoría diferente</string>
     <string name="no_browser_installed">No se pudo encontrar una aplicación para navegar por internet</string>

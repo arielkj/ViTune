@@ -134,6 +134,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.limitedParallelism
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -538,7 +539,13 @@ class MainApplication : Application(), SingletonImageLoader.Factory, Configurati
     }
 
     override fun newImageLoader(context: PlatformContext) = ImageLoader.Builder(this)
-        .crossfade(true)
+        // Car build: no crossfade and at most 2 image fetches/decodes in
+        // parallel. On the AC8227L radio the default Coil behaviour (many
+        // images decoding at once, each with an alpha animation) stalls
+        // scrolling; serialising the work keeps lists fluid.
+        .crossfade(false)
+        .fetcherCoroutineContext(Dispatchers.IO.limitedParallelism(2))
+        .decoderCoroutineContext(Dispatchers.Default.limitedParallelism(2))
         .memoryCache {
             MemoryCache.Builder()
                 .maxSizePercent(context, 0.1)

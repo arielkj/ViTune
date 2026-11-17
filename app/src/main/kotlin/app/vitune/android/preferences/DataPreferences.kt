@@ -13,6 +13,13 @@ import kotlin.time.Duration.Companion.hours
 object DataPreferences : GlobalPreferencesHolder() {
     var coilDiskCacheMaxSize by enum(CoilDiskCacheSize.`128MB`)
     var exoPlayerDiskCacheMaxSize by enum(ExoPlayerDiskCacheSize.`2GB`)
+
+    /**
+     * Car build: tree Uris of the music folders the user chose in the Local
+     * tab (SAF picker). Stored as strings so they survive restarts; the
+     * persistable URI permission is taken when the folder is chosen.
+     */
+    var localMusicFolders by stringSet(emptySet())
     var pauseHistory by boolean(false)
     var pausePlaytime by boolean(false)
     var pauseSearchHistory by boolean(false)

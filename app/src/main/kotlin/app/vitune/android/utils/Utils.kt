@@ -128,10 +128,18 @@ val Song.asMediaItem: MediaItem
         )
         .setMediaId(id)
         .setUri(
-            if (isLocal) ContentUris.withAppendedId(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                id.substringAfter(LOCAL_KEY_PREFIX).toLong()
-            ) else id.toUri()
+            if (isLocal) {
+                // Car build: SAF songs have ids "local:saf:<document uri>";
+                // the document Uri itself is the playable Uri. MediaStore
+                // songs keep the "local:<row id>" form.
+                val localPart = id.substringAfter(LOCAL_KEY_PREFIX)
+                if (localPart.startsWith(LocalMusicFolders.SAF_MARKER)) localPart
+                    .removePrefix(LocalMusicFolders.SAF_MARKER).toUri()
+                else ContentUris.withAppendedId(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    localPart.toLong()
+                )
+            } else id.toUri()
         )
         .setCustomCacheKey(id)
         .build()
