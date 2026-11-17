@@ -17,6 +17,7 @@ import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.PresetReverb
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.support.v4.media.session.MediaSessionCompat
@@ -1354,17 +1355,106 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             SimpleCache(directory, cacheEvictor, createDatabaseProvider(context))
         }
 
+        /**
+         * Car build: resolves a song's direct audio URL and caches it in
+         * [uriCache]. This is the slow step of every download and every
+         * first playback: it asks Innertube for the player info and then
+         * runs yt-dlp (Python, on the device) to extract the direct
+         * googlevideo URL. Blocking: it performs network requests and the
+         * on-device yt-dlp extraction on the calling thread, so call it
+         * only from a worker thread. Returns the direct [Uri] and its
+         * content length; throws [VideoIdMismatchException] or
+         * [UnplayableException] when the song cannot be resolved, exactly
+         * as the resolver did before.
+         * The same function backs the download pre-resolver in
+         * PrecacheService, so a playlist download resolves each URL once
+         * instead of once per download slot and retry.
+         */
+        fun resolveStreamUri(
+            mediaId: String,
+            uriCache: UriCache<String, Long?>,
+            includePlayerInfo: Boolean = true,
+            findMediaItem: suspend (videoId: String) -> MediaItem? = { null }
+        ): Pair<Uri, Long?> {
+            uriCache[mediaId]?.let { return it.uri to it.meta }
+
+            val body = if (includePlayerInfo) {
+                runBlocking(Dispatchers.IO) {
+                    Innertube.player(PlayerBody(videoId = mediaId))
+                }?.getOrNull()
+            } else null
+            val youtubeFormat = body?.streamingData?.highestQualityFormat
+
+            val info = runCatching {
+                Dependencies.runDownload(mediaId)
+            }.mapCatching {
+                YouTubeDLResponse.fromString(it)
+            }.also { it.exceptionOrNull()?.printStackTrace() }.getOrNull()
+            if (info?.id != mediaId) throw VideoIdMismatchException()
+            val format = info.formats?.firstOrNull { it.formatId == info.formatId }
+
+            val uri =
+                runCatching { info.url?.toUri() }.getOrNull() ?: throw UnplayableException()
+
+            val mediaItem = runCatching {
+                runBlocking(Dispatchers.IO) { findMediaItem(mediaId) }
+            }.getOrNull()
+
+            val extras = mediaItem?.mediaMetadata?.extras?.songBundle
+            if (extras?.durationText == null) {
+                body
+                    ?.streamingData
+                    ?.highestQualityFormat
+                    ?.approxDurationMs
+                    ?.div(1000)
+                    ?.let(DateUtils::formatElapsedTime)
+                    ?.removePrefix("0")
+                    ?.let { durationText ->
+                        extras?.durationText = durationText
+                        Database.updateDurationText(mediaId, durationText)
+                    }
+            }
+
+            transaction {
+                runCatching {
+                    mediaItem?.let(Database::insert)
+                    Database.insert(
+                        Format(
+                            songId = mediaId,
+                            itag = info.formatId?.toIntOrNull(),
+                            mimeType = youtubeFormat?.mimeType,
+                            bitrate = format?.abr?.let { it * 1000 }?.toLong(),
+                            loudnessDb = body?.playerConfig?.audioConfig?.normalizedLoudnessDb,
+                            contentLength = info.fileSize,
+                            lastModified = youtubeFormat?.lastModified
+                        )
+                    )
+                }
+            }
+
+            uriCache.push(
+                key = mediaId,
+                meta = info.fileSize,
+                uri = uri
+            )
+
+            return uri to info.fileSize
+        }
+
         @Suppress("CyclomaticComplexMethod")
         fun createYouTubeDataSourceResolverFactory(
             context: Context,
             cache: Cache,
             chunkLength: Long? = DEFAULT_CHUNK_LENGTH,
             findMediaItem: suspend (videoId: String) -> MediaItem? = { null },
-            uriCache: UriCache<String, Long?> = UriCache()
+            uriCache: UriCache<String, Long?> = UriCache(),
+            upstreamFactory: DataSource.Factory? = null,
+            includePlayerInfo: Boolean = true,
+            resolveMaxRetries: Int = 2
         ): DataSource.Factory = ResolvingDataSource.Factory(
             ConditionalCacheDataSourceFactory(
                 cacheDataSourceFactory = cache.readOnlyWhen { PlayerPreferences.pauseCache }.asDataSource,
-                upstreamDataSourceFactory = context.defaultDataSource,
+                upstreamDataSourceFactory = upstreamFactory ?: context.defaultDataSource,
                 shouldCache = { !it.isLocal }
             )
         ) { dataSpec ->
@@ -1396,76 +1486,19 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             ) {
                 dataSpec
             } else {
-                uriCache[mediaId]?.let { cachedUri ->
-                    dataSpec
-                        .withUri(cachedUri.uri)
-                        .ranged(cachedUri.meta)
-                } ?: run {
-                    val body = runBlocking(Dispatchers.IO) {
-                        Innertube.player(PlayerBody(videoId = mediaId))
-                    }?.getOrNull()
-                    val youtubeFormat = body?.streamingData?.highestQualityFormat
+                val (uri, contentLength) = resolveStreamUri(
+                    mediaId = mediaId,
+                    uriCache = uriCache,
+                    includePlayerInfo = includePlayerInfo,
+                    findMediaItem = findMediaItem
+                )
 
-                    val info = runCatching {
-                        Dependencies.runDownload(mediaId)
-                    }.mapCatching {
-                        YouTubeDLResponse.fromString(it)
-                    }.also { it.exceptionOrNull()?.printStackTrace() }.getOrNull()
-                    if (info?.id != mediaId) throw VideoIdMismatchException()
-                    val format = info.formats?.firstOrNull { it.formatId == info.formatId }
-
-                    val uri =
-                        runCatching { info.url?.toUri() }.getOrNull() ?: throw UnplayableException()
-
-                    val mediaItem = runCatching {
-                        runBlocking(Dispatchers.IO) { findMediaItem(mediaId) }
-                    }.getOrNull()
-
-                    val extras = mediaItem?.mediaMetadata?.extras?.songBundle
-                    if (extras?.durationText == null) {
-                        body
-                            ?.streamingData
-                            ?.highestQualityFormat
-                            ?.approxDurationMs
-                            ?.div(1000)
-                            ?.let(DateUtils::formatElapsedTime)
-                            ?.removePrefix("0")
-                            ?.let { durationText ->
-                                extras?.durationText = durationText
-                                Database.updateDurationText(mediaId, durationText)
-                            }
-                    }
-
-                    transaction {
-                        runCatching {
-                            mediaItem?.let(Database::insert)
-                            Database.insert(
-                                Format(
-                                    songId = mediaId,
-                                    itag = info.formatId?.toIntOrNull(),
-                                    mimeType = youtubeFormat?.mimeType,
-                                    bitrate = format?.abr?.let { it * 1000 }?.toLong(),
-                                    loudnessDb = body?.playerConfig?.audioConfig?.normalizedLoudnessDb,
-                                    contentLength = info.fileSize,
-                                    lastModified = youtubeFormat?.lastModified
-                                )
-                            )
-                        }
-                    }
-
-                    uriCache.push(
-                        key = mediaId,
-                        meta = info.fileSize,
-                        uri = uri
-                    )
-
-                    dataSpec
-                        .withUri(uri)
-                        .ranged(info.fileSize)
-                }
+                dataSpec
+                    .withUri(uri)
+                    .ranged(contentLength)
             }
         }.handleUnknownErrors {
             uriCache.clear()
-        }.retryIf<Throwable>(maxRetries = 2)
+        }.retryIf<Throwable>(maxRetries = resolveMaxRetries)
     }
 }

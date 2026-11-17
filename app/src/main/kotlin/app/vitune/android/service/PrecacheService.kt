@@ -10,6 +10,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheSpan
 import androidx.media3.datasource.cache.ContentMetadataMutations
@@ -27,6 +30,7 @@ import app.vitune.android.utils.ActionReceiver
 import app.vitune.android.utils.download
 import app.vitune.android.utils.intent
 import app.vitune.android.utils.toast
+import app.vitune.core.data.utils.UriCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -175,7 +179,11 @@ class PrecacheService : DownloadService(
                 findMediaItem = { null },
                 context = this,
                 cache = cache,
-                chunkLength = null
+                chunkLength = null,
+                uriCache = downloadUriCache,
+                upstreamFactory = downloadUpstreamFactory(this),
+                includePlayerInfo = false,
+                resolveMaxRetries = 1
             ),
             /* executor = */ executor
         ).apply {
@@ -242,6 +250,44 @@ class PrecacheService : DownloadService(
     }
 
     companion object {
+        /**
+         * Car build: downloads share one resolved-URL cache (256 entries
+         * instead of the 16-entry default) so a whole playlist resolves
+         * each song once. It is filled by [schedulePlaylistCache] before
+         * the downloads start and read by the DownloadManager's resolver,
+         * which then skips the slow on-device yt-dlp extraction for songs
+         * that were already resolved. The cache lives in the companion so
+         * it survives the service being recreated.
+         */
+        private val downloadUriCache = UriCache<String, Long?>(256)
+
+        /**
+         * Downloads use a longer read timeout than playback: on a slow
+         * mobile link a stall of a few seconds is normal and must not
+         * abort the download (each abort used to trigger a full
+         * re-resolution through yt-dlp).
+         */
+        private fun downloadUpstreamFactory(context: Context): DataSource.Factory =
+            DefaultDataSource.Factory(
+                context,
+                DefaultHttpDataSource.Factory()
+                    .setConnectTimeoutMs(16000)
+                    .setReadTimeoutMs(30000)
+                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0")
+            )
+
+        /**
+         * Resolves stream URLs with at most 4 extractions at once. yt-dlp
+         * extraction is the slow step (Python on a weak CPU); 4 in
+         * parallel overlaps the network waits without hogging the 4 cores,
+         * and the downloads themselves stay capped at 3 by the
+         * DownloadManager, so the UI work of the v2 fluidity pass is
+         * untouched.
+         */
+        private val resolveDispatcher =
+            Executors.newFixedThreadPool(4).asCoroutineDispatcher()
+        private val resolveScope = CoroutineScope(resolveDispatcher + SupervisorJob())
+
         fun scheduleCache(context: Context, mediaItem: MediaItem) {
             if (mediaItem.isLocal) return
 
@@ -267,6 +313,35 @@ class PrecacheService : DownloadService(
                         it.printStackTrace()
                         context.toast(context.getString(R.string.error_pre_cache))
                     }
+                }
+            }
+        }
+
+        /**
+         * Car build: downloads a whole playlist (or album) faster. The
+         * slow step of every download is resolving the stream URL with
+         * on-device yt-dlp (Python): it used to run inside each of the 3
+         * download slots, so a playlist paid the extraction cost
+         * serially, one song after another, and a failed download paid
+         * it again on every retry. Here the URLs are resolved first, up
+         * to 4 at a time, and each song's download is enqueued the
+         * moment its URL is ready, so extraction and downloading
+         * overlap instead of blocking each other. A song whose URL
+         * cannot be resolved is still enqueued: the download itself
+         * retries the resolution as before.
+         */
+        fun schedulePlaylistCache(context: Context, songs: List<MediaItem>) {
+            songs.forEach { mediaItem ->
+                if (mediaItem.isLocal) return@forEach
+                resolveScope.launch {
+                    runCatching {
+                        PlayerService.resolveStreamUri(
+                            mediaId = mediaItem.mediaId,
+                            uriCache = downloadUriCache,
+                            includePlayerInfo = false
+                        )
+                    }.exceptionOrNull()?.printStackTrace()
+                    scheduleCache(context, mediaItem)
                 }
             }
         }

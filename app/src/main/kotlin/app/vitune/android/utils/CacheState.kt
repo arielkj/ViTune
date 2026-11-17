@@ -67,21 +67,28 @@ fun PlaylistDownloadIcon(
         label = "",
         transitionSpec = { fadeIn() togetherWith fadeOut() }
     ) { currentIsDownloading ->
+        // Car build: per-song cache state, computed once and reused for
+        // the button visibility and for which songs still need
+        // downloading, so a playlist does not re-resolve and re-enqueue
+        // songs that are already in the cache.
+        val cachedStates = songs.map {
+            isCached(
+                mediaId = it.mediaId,
+                key = isDownloading
+            )
+        }
+
         when {
             currentIsDownloading -> CircularProgressIndicator(modifier = Modifier.size(18.dp))
 
-            !songs.map { it.mediaId }.fastAll {
-                isCached(
-                    mediaId = it,
-                    key = isDownloading
-                )
-            } -> HeaderIconButton(
+            !cachedStates.fastAll { it } -> HeaderIconButton(
                 icon = R.drawable.download,
                 color = colorPalette.text,
                 onClick = {
-                    songs.forEach {
-                        PrecacheService.scheduleCache(context.applicationContext, it)
-                    }
+                    PrecacheService.schedulePlaylistCache(
+                        context.applicationContext,
+                        songs.filterIndexed { index, _ -> !cachedStates[index] }
+                    )
                 },
                 modifier = modifier
             )
