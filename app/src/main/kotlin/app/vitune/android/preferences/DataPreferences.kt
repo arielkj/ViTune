@@ -6,7 +6,6 @@ import app.vitune.android.GlobalPreferencesHolder
 import app.vitune.android.R
 import app.vitune.core.data.enums.CoilDiskCacheSize
 import app.vitune.core.data.enums.ExoPlayerDiskCacheSize
-import app.vitune.providers.innertube.Innertube
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -21,10 +20,7 @@ object DataPreferences : GlobalPreferencesHolder() {
     var topListLength by topListLengthProperty
     val topListPeriodProperty = enum(TopListPeriod.AllTime)
     var topListPeriod by topListPeriodProperty
-    var quickPicksSource by enum(QuickPicksSource.Trending)
     var versionCheckPeriod by enum(VersionCheckPeriod.Off)
-    var shouldCacheQuickPicks by boolean(true)
-    var cachedQuickPicks by json(Innertube.RelatedPage())
     var autoSyncPlaylists by boolean(true)
 
     enum class TopListPeriod(
@@ -36,11 +32,6 @@ object DataPreferences : GlobalPreferencesHolder() {
         PastMonth(displayName = { stringResource(R.string.past_month) }, duration = 30.days),
         PastYear(displayName = { stringResource(R.string.past_year) }, 365.days),
         AllTime(displayName = { stringResource(R.string.all_time) })
-    }
-
-    enum class QuickPicksSource(val displayName: @Composable () -> String) {
-        Trending(displayName = { stringResource(R.string.trending) }),
-        LastInteraction(displayName = { stringResource(R.string.last_interaction) })
     }
 
     @Suppress("unused")

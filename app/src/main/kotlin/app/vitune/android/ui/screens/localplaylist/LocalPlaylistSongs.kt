@@ -3,8 +3,10 @@ package app.vitune.android.ui.screens.localplaylist
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -54,7 +56,9 @@ import app.vitune.android.ui.components.themed.ReorderHandle
 import app.vitune.android.ui.components.themed.SecondaryTextButton
 import app.vitune.android.ui.components.themed.TextFieldDialog
 import app.vitune.android.ui.items.SongItem
+import app.vitune.android.utils.DownloadStateIcon
 import app.vitune.android.utils.PlaylistDownloadIcon
+import app.vitune.android.utils.PlaylistDownloadProgress
 import app.vitune.android.utils.asMediaItem
 import app.vitune.android.utils.completed
 import app.vitune.android.utils.enqueue
@@ -267,6 +271,12 @@ fun LocalPlaylistSongs(
                         }
 
                         if (!isLandscape) thumbnailContent()
+
+                        // Car build: download progress for the whole playlist
+                        // ("X of Y" + bar) under the header.
+                        PlaylistDownloadProgress(
+                            songs = songs.map { it.asMediaItem }.toImmutableList()
+                        )
                     }
                 }
 
@@ -305,10 +315,17 @@ fun LocalPlaylistSongs(
                         song = song,
                         thumbnailSize = Dimensions.thumbnails.song,
                         trailingContent = {
-                            ReorderHandle(
-                                reorderingState = reorderingState,
-                                index = index
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                // Car build: per-song download state.
+                                DownloadStateIcon(mediaId = song.id)
+                                ReorderHandle(
+                                    reorderingState = reorderingState,
+                                    index = index
+                                )
+                            }
                         },
                         clip = !reorderingState.isDragging,
                         isPlaying = playing && currentMediaId == song.id

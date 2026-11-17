@@ -15,7 +15,11 @@ android {
     namespace = appId
     compileSdk = 37
 
-    val abis = listOf("arm64-v8a", "x86_64")
+    // Car build: the target radio (ALPS Q91-A5-CPL, AutoChips AC8227L) is a
+    // 32-bit ARMv7 device (armeabi-v7a). Building only that ABI keeps the
+    // APK small and, more importantly, produces native libraries the radio
+    // can actually load (arm64-v8a/x86_64 .so files are useless there).
+    val abis = listOf("armeabi-v7a")
     val cmakeVersion = "4.1.2"
     ndkVersion = "30.0.16248370"
 
@@ -45,6 +49,7 @@ android {
         abi {
             isEnable = true
             reset()
+            include("armeabi-v7a")
             isUniversalApk = false
         }
     }

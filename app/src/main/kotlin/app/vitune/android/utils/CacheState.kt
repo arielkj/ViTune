@@ -5,7 +5,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -14,7 +19,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAll
 import androidx.media3.common.MediaItem
@@ -34,12 +42,15 @@ import app.vitune.android.service.PrecacheService
 import app.vitune.android.service.downloadState
 import app.vitune.android.ui.components.themed.CircularProgressIndicator
 import app.vitune.android.ui.components.themed.HeaderIconButton
+import app.vitune.android.ui.components.themed.LinearProgressIndicator
 import app.vitune.core.ui.LocalAppearance
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun PlaylistDownloadIcon(
@@ -100,6 +111,89 @@ fun isCached(
         format?.contentLength?.let { len ->
             binder?.cache?.isCached(mediaId, 0, len)
         } ?: false
+    }
+}
+
+/**
+ * Car build: download progress for a whole playlist, shown in the playlist
+ * screen header. Counts how many of the songs are already downloaded
+ * (cached) and shows "X of Y" with a progress bar. While a download is
+ * running the cached state is re-checked every second so the progress moves
+ * live. Local songs count as downloaded: they are already on the device.
+ * Progress is song-based (songs finished / total) rather than byte-based:
+ * the download service does not expose per-song byte progress to the UI.
+ */
+@Composable
+fun PlaylistDownloadProgress(
+    songs: ImmutableList<MediaItem>,
+    modifier: Modifier = Modifier
+) {
+    val typography = LocalAppearance.current.typography
+    val isDownloading by downloadState.collectAsState()
+
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(isDownloading) {
+        while (isDownloading) {
+            delay(1.seconds)
+            tick++
+        }
+    }
+
+    val total = songs.size
+    if (total == 0) return
+
+    val cachedCount = songs.count { isCached(mediaId = it.mediaId, key = tick) }
+
+    if (cachedCount == total && !isDownloading) return
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        BasicText(
+            text = if (isDownloading) stringResource(R.string.downloading_x_of_y, cachedCount, total)
+            else stringResource(R.string.downloaded_x_of_y, cachedCount, total),
+            style = typography.xs.secondary,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        LinearProgressIndicator(
+            progress = cachedCount / total.toFloat(),
+            animateProgress = false,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}
+
+/**
+ * Car build: per-song download state icon for playlist rows. A check mark
+ * when the song is downloaded, a spinner while a download is running and
+ * this song is not downloaded yet, nothing otherwise.
+ */
+@Composable
+fun DownloadStateIcon(
+    mediaId: String,
+    modifier: Modifier = Modifier
+) {
+    val (colorPalette) = LocalAppearance.current
+    val isDownloading by downloadState.collectAsState()
+
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(isDownloading) {
+        while (isDownloading) {
+            delay(1.seconds)
+            tick++
+        }
+    }
+
+    val cached = isCached(mediaId = mediaId, key = tick)
+    when {
+        cached -> Image(
+            painter = painterResource(R.drawable.download_done),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(colorPalette.accent),
+            modifier = modifier.size(18.dp)
+        )
+
+        isDownloading -> CircularProgressIndicator(modifier = modifier.size(18.dp))
     }
 }
 
