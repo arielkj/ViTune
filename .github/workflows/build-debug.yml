@@ -16,6 +16,13 @@ jobs:
           distribution: temurin
           java-version: "25"
 
+      # Chaquopy needs a build-time Python matching the runtime version
+      # (3.11) to compile bytecode; the runner image does not ship it.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Install Android SDK packages
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
