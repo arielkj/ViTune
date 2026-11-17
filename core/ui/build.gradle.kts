@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "app.vitune.core.ui"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 21

@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "app.vitune.compose.persist"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 21
