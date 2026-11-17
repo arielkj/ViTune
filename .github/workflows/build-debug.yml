@@ -21,11 +21,17 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
-            "platforms;android-37" \
             "build-tools;36.0.0" \
-            "build-tools;37.0.0" \
             "ndk;30.0.16248370" \
             "cmake;4.1.2"
+
+      # compileSdk 37 (Android 17 preview) is only published on the canary
+      # channel; the stable channel has no "platforms;android-37" package.
+      - name: Install Android 37 platform (canary channel)
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --channel=3 \
+            "platforms;android-37" \
+            "build-tools;37.0.0"
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
