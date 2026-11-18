@@ -50,6 +50,13 @@ allprojects {
     tasks.matching { it.name == "checkReleaseAarMetadata" }.configureEach {
         enabled = false
     }
+    // Disabling the check leaves its output directory uncreated, but
+    // bundleReleaseLocalLintAar still declares that directory as an input
+    // and Gradle's work validation fails when it does not exist; create it
+    // empty (configureEach runs at task realization, before validation).
+    tasks.matching { it.name == "bundleReleaseLocalLintAar" }.configureEach {
+        file("build/intermediates/aar_metadata_check/release/checkReleaseAarMetadata").mkdirs()
+    }
 
     dependencies {
         detektPlugins(topLevelLibs.detekt.compose)
