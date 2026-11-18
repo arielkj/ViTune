@@ -45,8 +45,10 @@ allprojects {
     // 37, which is not published; everything resolves against android-36).
     // The release build failed on :compose:preferences and :compose:persist
     // checkReleaseAarMetadata; skip it for release builds in all modules.
-    afterEvaluate {
-        tasks.findByName("checkReleaseAarMetadata")?.let { it.enabled = false }
+    // (matching+configureEach, not afterEvaluate: AGP creates these tasks
+    // after this block runs, so findByName would see nothing.)
+    tasks.matching { it.name == "checkReleaseAarMetadata" }.configureEach {
+        enabled = false
     }
 
     dependencies {
