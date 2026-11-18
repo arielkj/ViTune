@@ -63,9 +63,10 @@ android {
     // 1.19.1) declare minCompileSdk 37, and the API 37 platform is not
     // published. The Kotlin/Java compilers already enforce that no API 37
     // symbol is used (everything resolves against android-36), so the
-    // check adds nothing here; skip it for the debug build.
+    // check adds nothing here; skip it for the debug and release builds.
     afterEvaluate {
         tasks.findByName("checkDebugAarMetadata")?.let { it.enabled = false }
+        tasks.findByName("checkReleaseAarMetadata")?.let { it.enabled = false }
     }
 
     signingConfigs {
@@ -85,6 +86,11 @@ android {
         }
 
         release {
+            // Car release build: keep the same package as the debug builds
+            // (app.vitune.android.debug) so this release replaces v3 as the
+            // same app. BUILD ONLY — remove to go back to a normal release
+            // (package app.vitune.android).
+            applicationIdSuffix = ".debug"
             versionNameSuffix = "-RELEASE"
             isMinifyEnabled = true
             isShrinkResources = true
