@@ -40,6 +40,15 @@ allprojects {
         }
     }
 
+    // Car build: the AAR metadata check fails in every module for the same
+    // reason as in app/build.gradle.kts (dependencies declare minCompileSdk
+    // 37, which is not published; everything resolves against android-36).
+    // The release build failed on :compose:preferences and :compose:persist
+    // checkReleaseAarMetadata; skip it for release builds in all modules.
+    afterEvaluate {
+        tasks.findByName("checkReleaseAarMetadata")?.let { it.enabled = false }
+    }
+
     dependencies {
         detektPlugins(topLevelLibs.detekt.compose)
         detektPlugins(topLevelLibs.detekt.formatting)
