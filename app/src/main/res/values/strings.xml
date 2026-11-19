@@ -118,6 +118,8 @@
     <string name="no_music_folder">No folder chosen yet. Choose the folder with your music and it will appear here.</string>
     <string name="folder_read_error">Could not read a folder. Check that it is still connected and try again.</string>
     <string name="remove_folder">Remove</string>
+    <string name="local_all_songs">Todas</string>
+    <string name="local_on_device">On this device</string>
     <string name="no_items_found">No items found</string>
     <string name="no_search_results">No results found. Please try a different query or category</string>
     <string name="no_browser_installed">Couldn\'t find an application to browse the internet</string>
