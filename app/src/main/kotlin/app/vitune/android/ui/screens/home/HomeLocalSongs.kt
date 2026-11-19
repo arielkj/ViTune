@@ -59,6 +59,7 @@ import app.vitune.android.utils.LocalMusicFolders.LocalFolderGroup
 import app.vitune.android.utils.hasPermission
 import app.vitune.android.utils.medium
 import app.vitune.android.utils.secondary
+import app.vitune.android.utils.semiBold
 import app.vitune.core.ui.Dimensions
 import app.vitune.core.ui.LocalAppearance
 import app.vitune.core.ui.utils.isAtLeastAndroid13
