@@ -279,6 +279,11 @@ interface DatabaseAccessor {
     @Query("SELECT * FROM Song WHERE id = :id")
     fun song(id: String): Flow<Song?>
 
+    // Car build (v4.1): synchronous lookup for the player service, which
+    // refreshes artwork of restored queue items on a background thread.
+    @Query("SELECT * FROM Song WHERE id = :id")
+    fun songSync(id: String): Song?
+
     @Query("SELECT likedAt FROM Song WHERE id = :songId")
     fun likedAt(songId: String): Flow<Long?>
 

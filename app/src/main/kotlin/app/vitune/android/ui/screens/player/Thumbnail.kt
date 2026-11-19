@@ -61,7 +61,7 @@ import app.vitune.android.ui.modifiers.onSwipe
 import app.vitune.android.utils.forceSeekToNext
 import app.vitune.android.utils.forceSeekToPrevious
 import app.vitune.android.utils.isInPip
-import app.vitune.android.utils.thumbnail
+import app.vitune.android.utils.playerArtworkUrl
 import app.vitune.android.utils.windowState
 import app.vitune.core.ui.Dimensions
 import app.vitune.core.ui.LocalAppearance
@@ -92,6 +92,14 @@ fun Thumbnail(
     val [colorPalette, _, _, thumbnailShape] = LocalAppearance.current
 
     val [window, error] = windowState()
+
+    // Car build (v4.1): the cover comes from the database row (the same
+    // source the Local list shows) when the player's MediaItem carries
+    // none, so a playing local song shows its cover.
+    val artworkModel = playerArtworkUrl(
+        mediaItem = window?.mediaItem,
+        size = (Dimensions.thumbnails.player.song - 64.dp).px
+    )
 
     val coroutineScope = rememberCoroutineScope()
     val transitionState = remember { SeekableTransitionState(false) }
@@ -172,8 +180,7 @@ fun Thumbnail(
             var height by remember { mutableIntStateOf(0) }
 
             AsyncImage(
-                model = currentWindow.mediaItem.mediaMetadata.artworkUri
-                    ?.thumbnail((Dimensions.thumbnails.player.song - 64.dp).px),
+                model = artworkModel,
                 placeholder = painterResource(id = R.drawable.ic_launcher_foreground),
                 error = painterResource(id = R.drawable.ic_launcher_foreground),
                 contentDescription = null,

@@ -616,6 +616,22 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             if (queue.isEmpty()) return@transaction
             Database.clearQueue()
 
+            // Car build (v4.1): a queue saved before the local covers
+            // existed carries MediaItems with no artworkUri at all. Refresh
+            // the artwork from the song rows now, still on the background
+            // thread, so the player, the notification and the lock screen
+            // all show the cover.
+            val mediaItems = queue.map { item ->
+                val saved = item.mediaItem
+                if (saved.mediaMetadata.artworkUri == null) {
+                    Database.songSync(saved.mediaId)?.thumbnailUrl?.toUri()?.let { artUri ->
+                        saved.buildUpon().setMediaMetadata(
+                            saved.mediaMetadata.buildUpon().setArtworkUri(artUri).build()
+                        ).build()
+                    } ?: saved
+                } else saved
+            }
+
             val index = queue
                 .indexOfFirst { it.position != null }
                 .coerceAtLeast(0)
@@ -624,10 +640,10 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                 runCatching {
                     player.setMediaItems(
                         /* mediaItems = */
-                        queue.map { item ->
-                            item.mediaItem.buildUpon()
-                                .setUri(item.mediaItem.mediaId)
-                                .setCustomCacheKey(item.mediaItem.mediaId)
+                        mediaItems.map { mediaItem ->
+                            mediaItem.buildUpon()
+                                .setUri(mediaItem.mediaId)
+                                .setCustomCacheKey(mediaItem.mediaId)
                                 .build()
                                 .apply {
                                     mediaMetadata.extras?.songBundle?.apply {

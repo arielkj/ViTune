@@ -10,6 +10,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SnapshotMutationPolicy
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,11 +23,13 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import app.vitune.android.Database
 import app.vitune.android.LocalPlayerServiceBinder
 import app.vitune.android.R
 import app.vitune.android.service.PlayerService
 import app.vitune.core.ui.utils.EqualizerIntentBundleAccessor
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -130,6 +133,27 @@ fun windowState(
     }
 
     return state
+}
+
+/**
+ * Car build (v4.1): the cover of the song that is playing, as a plain
+ * String model for Coil — exactly the way the Local list loads it.
+ *
+ * The MediaItem the player holds can carry no artwork at all (a queue
+ * restored from before the local covers existed, a song first played
+ * before its cover was scanned), while the database row — the same
+ * source the Local list shows — has the cover. Prefer the database
+ * cover; fall back to the MediaItem's artworkUri.
+ */
+@Composable
+fun playerArtworkUrl(mediaItem: MediaItem?, size: Int): String? {
+    val dbSong by remember(mediaItem?.mediaId) {
+        mediaItem?.mediaId?.let { Database.song(it) } ?: flowOf(null)
+    }.collectAsState(initial = null)
+    return remember(mediaItem, dbSong) {
+        (dbSong?.thumbnailUrl ?: mediaItem?.mediaMetadata?.artworkUri?.toString())
+            ?.thumbnail(size)
+    }
 }
 
 @Composable

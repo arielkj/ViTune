@@ -83,6 +83,7 @@ import app.vitune.android.utils.DisposableListener
 import app.vitune.android.utils.Pip
 import app.vitune.android.utils.forceSeekToNext
 import app.vitune.android.utils.forceSeekToPrevious
+import app.vitune.android.utils.playerArtworkUrl
 import app.vitune.android.utils.positionAndDurationState
 import app.vitune.android.utils.rememberEqualizerLauncher
 import app.vitune.android.utils.rememberPipHandler
@@ -90,7 +91,6 @@ import app.vitune.android.utils.seamlessPlay
 import app.vitune.android.utils.secondary
 import app.vitune.android.utils.semiBold
 import app.vitune.android.utils.shouldBePlaying
-import app.vitune.android.utils.thumbnail
 import app.vitune.compose.persist.PersistMapCleanup
 import app.vitune.compose.routing.OnGlobalRoute
 import app.vitune.core.ui.Dimensions
@@ -177,6 +177,10 @@ fun Player(
     val metadata = remember(mediaItem) { mediaItem?.mediaMetadata }
     val extras = remember(metadata) { metadata?.extras?.songBundle }
 
+    // Car build (v4.1): same cover source as the full player — the
+    // database row when the player's MediaItem carries no artwork.
+    val artworkModel = playerArtworkUrl(mediaItem, Dimensions.thumbnails.song.px)
+
     val horizontalBottomPaddingValues = windowInsets
         .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
         .asPaddingValues()
@@ -231,7 +235,7 @@ fun Player(
                     modifier = Modifier.height(Dimensions.items.collapsedPlayerHeight)
                 ) {
                     AsyncImage(
-                        model = metadata?.artworkUri?.thumbnail(Dimensions.thumbnails.song.px),
+                        model = artworkModel,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
