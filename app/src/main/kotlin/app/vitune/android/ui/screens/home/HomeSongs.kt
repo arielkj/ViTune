@@ -29,10 +29,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -86,10 +88,16 @@ import app.vitune.core.ui.onOverlay
 import app.vitune.core.ui.overlay
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlin.time.Duration.Companion.milliseconds
 
 private val Song.formattedTotalPlayTime @Composable get() = totalPlayTimeMs.milliseconds.formatted
+
+// Car build (v4.2): the song list renders one page at a time instead of
+// composing rows for the whole library at once — the list appears
+// instantly and more rows load as the user scrolls near the end.
+private const val SONG_PAGE_SIZE = 100
 
 @Composable
 fun HomeSongs(
@@ -141,11 +149,33 @@ fun HomeSongs(
     }
     var hidingSong: String? by rememberSaveable { mutableStateOf(null) }
 
+    // Car build (v4.2): how many rows of the (possibly huge) list are
+    // rendered. The full list stays in memory for playback and filtering,
+    // but only the visible page is composed, so a 5,000-song library
+    // opens as fast as a 50-song one.
+    var visibleCount by remember { mutableIntStateOf(SONG_PAGE_SIZE) }
+
     LaunchedEffect(sortBy, sortOrder, songProvider) {
+        visibleCount = SONG_PAGE_SIZE
         songProvider().collect { items = it.toPersistentList() }
     }
 
     val lazyListState = rememberLazyListState()
+
+    // Load the next page when the user scrolls near the end of the
+    // rendered page. The fling/scroll itself is untouched — this only
+    // decides how many rows exist, never how they move.
+    LaunchedEffect(lazyListState) {
+        snapshotFlow { lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .collect { lastVisible ->
+                if (lastVisible != null && lastVisible >= visibleCount - 5 &&
+                    visibleCount < filteredItems.size
+                ) {
+                    visibleCount = (visibleCount + SONG_PAGE_SIZE)
+                        .coerceAtMost(filteredItems.size)
+                }
+            }
+    }
 
     val [currentMediaId, playing] = playingSong(binder)
 
@@ -229,7 +259,7 @@ fun HomeSongs(
             }
 
             items(
-                items = filteredItems,
+                items = filteredItems.take(visibleCount),
                 key = { song -> song.id }
             ) { song ->
                 if (hidingSong == song.id) HideSongDialog(

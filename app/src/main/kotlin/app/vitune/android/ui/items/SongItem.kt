@@ -1,6 +1,5 @@
 package app.vitune.android.ui.items
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -30,6 +29,7 @@ import app.vitune.android.R
 import app.vitune.android.models.Song
 import app.vitune.android.preferences.AppearancePreferences
 import app.vitune.android.ui.components.themed.TextPlaceholder
+import app.vitune.android.utils.LocalMusicFolders
 import app.vitune.android.utils.medium
 import app.vitune.android.utils.secondary
 import app.vitune.android.utils.semiBold
@@ -80,7 +80,11 @@ fun SongItem(
 
     SongItem(
         modifier = modifier,
-        thumbnailUrl = song.mediaMetadata.artworkUri?.thumbnail(thumbnailSize.px)?.toString(),
+        // Car build (v4.2): list rows load the pre-decoded ~200 px
+        // thumbnail for local covers, never the full cover.
+        thumbnailUrl = song.mediaMetadata.artworkUri?.toString()
+            ?.let { LocalMusicFolders.smallCoverUrl(LocalContext.current, it) }
+            ?.thumbnail(thumbnailSize.px),
         title = song.mediaMetadata.title?.toString(),
         authors = song.mediaMetadata.artist?.toString(),
         duration = extras?.durationText,
@@ -110,7 +114,12 @@ fun SongItem(
 ) = SongItem(
     modifier = modifier,
     index = index,
-    thumbnailUrl = song.thumbnailUrl?.thumbnail(thumbnailSize.px),
+    // Car build (v4.2): list rows load the pre-decoded ~200 px thumbnail
+    // for local covers, never the full 600 px cover. The player still
+    // reads the full cover from the database (v4.1).
+    thumbnailUrl = song.thumbnailUrl
+        ?.let { LocalMusicFolders.smallCoverUrl(LocalContext.current, it) }
+        ?.thumbnail(thumbnailSize.px),
     title = song.title,
     authors = song.artistsText,
     duration = song.durationText,
@@ -150,11 +159,13 @@ private fun SongItem(
         explicit = explicit,
         thumbnailSize = thumbnailSize,
         thumbnailContent = {
+            // Car build (v4.2): one Box for the thumbnail instead of two
+            // nested ones — one less layout node per row while scrolling.
             Box(
                 modifier = Modifier
+                    .size(thumbnailSize)
                     .clip(thumbnailShape)
                     .background(colorPalette.background1)
-                    .fillMaxSize()
             ) {
                 AsyncImage(
                     model = thumbnailUrl,
@@ -176,9 +187,9 @@ private fun SongItem(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-            }
 
-            onThumbnailContent?.invoke(this)
+                onThumbnailContent?.invoke(this)
+            }
         },
         modifier = modifier,
         trailingContent = trailingContent,
@@ -196,7 +207,7 @@ private fun SongItem(
     duration: String?,
     explicit: Boolean,
     thumbnailSize: Dp,
-    thumbnailContent: @Composable BoxScope.() -> Unit,
+    thumbnailContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     trailingContent: @Composable (() -> Unit)? = null,
     showDuration: Boolean = true,
@@ -206,10 +217,10 @@ private fun SongItem(
 ) {
     val (colorPalette, typography) = LocalAppearance.current
 
-    val backgroundColor by animateColorAsState(
-        targetValue = if (isPlaying) colorPalette.background2 else Color.Transparent,
-        label = ""
-    )
+    // Car build (v4.2): plain color, no per-row background animation —
+    // the playing row just switches background instantly. One less
+    // animation running on every list change on the weak radio.
+    val backgroundColor = if (isPlaying) colorPalette.background2 else Color.Transparent
 
     if (!(hideExplicit && explicit)) ItemContainer(
         alternative = false,
@@ -217,14 +228,16 @@ private fun SongItem(
         modifier = modifier
             .background(backgroundColor)
             .let {
-                if (clip) Modifier.clip(LocalAppearance.current.thumbnailShape) then it
-                else it
+                // The rounded clip only shows when the row has a
+                // background (the playing row); a transparent row needs
+                // no clip layer, which saves one offscreen pass per row
+                // while scrolling.
+                if (clip && backgroundColor != Color.Transparent) {
+                    Modifier.clip(LocalAppearance.current.thumbnailShape) then it
+                } else it
             }
     ) {
-        Box(
-            modifier = Modifier.size(thumbnailSize),
-            content = thumbnailContent
-        )
+        thumbnailContent()
 
         ItemInfoContainer {
             trailingContent?.let {

@@ -187,7 +187,11 @@ class PrecacheService : DownloadService(
             ),
             /* executor = */ executor
         ).apply {
-            maxParallelDownloads = 3
+            // Car build (v4.2): 2 downloads at a time instead of 3. On
+            // the quad-core radio, parallel downloads split the weak CPU
+            // and starve playback and the UI; 2 still overlap the network
+            // waits without hogging the cores.
+            maxParallelDownloads = 2
             minRetryCount = 1
             requirements = Requirements(Requirements.NETWORK)
 
@@ -277,15 +281,16 @@ class PrecacheService : DownloadService(
             )
 
         /**
-         * Resolves stream URLs with at most 4 extractions at once. yt-dlp
-         * extraction is the slow step (Python on a weak CPU); 4 in
-         * parallel overlaps the network waits without hogging the 4 cores,
-         * and the downloads themselves stay capped at 3 by the
-         * DownloadManager, so the UI work of the v2 fluidity pass is
-         * untouched.
+         * Resolves stream URLs with at most 2 extractions at once. yt-dlp
+         * extraction is the slow step (Python on a weak CPU); 2 in
+         * parallel overlap the network waits without hogging the 4 cores,
+         * and the downloads themselves stay capped at 2 by the
+         * DownloadManager, so playback and the UI are never starved.
+         * (v4.2: was 4 — on this radio 4 extractions at once slowed
+         * everything else down, including the song that was playing.)
          */
         private val resolveDispatcher =
-            Executors.newFixedThreadPool(4).asCoroutineDispatcher()
+            Executors.newFixedThreadPool(2).asCoroutineDispatcher()
         private val resolveScope = CoroutineScope(resolveDispatcher + SupervisorJob())
 
         fun scheduleCache(context: Context, mediaItem: MediaItem) {
@@ -320,11 +325,11 @@ class PrecacheService : DownloadService(
         /**
          * Car build: downloads a whole playlist (or album) faster. The
          * slow step of every download is resolving the stream URL with
-         * on-device yt-dlp (Python): it used to run inside each of the 3
+         * on-device yt-dlp (Python): it used to run inside each of the
          * download slots, so a playlist paid the extraction cost
          * serially, one song after another, and a failed download paid
          * it again on every retry. Here the URLs are resolved first, up
-         * to 4 at a time, and each song's download is enqueued the
+         * to 2 at a time, and each song's download is enqueued the
          * moment its URL is ready, so extraction and downloading
          * overlap instead of blocking each other. A song whose URL
          * cannot be resolved is still enqueued: the download itself

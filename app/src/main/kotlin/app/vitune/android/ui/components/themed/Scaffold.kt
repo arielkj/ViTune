@@ -1,13 +1,10 @@
 package app.vitune.android.ui.components.themed
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Companion.Down
-import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Companion.Up
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.VisibilityThreshold
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
 import app.vitune.android.R
 import app.vitune.android.preferences.UIStatePreferences
 import app.vitune.core.ui.LocalAppearance
@@ -55,17 +51,16 @@ fun Scaffold(
 
         AnimatedContent(
             targetState = tabIndex,
+            // Car build (v4.2): no slide between tabs. The old spring
+            // slide (low stiffness, full-screen) cost a whole animation
+            // of frames on every tab switch on the weak radio, and it
+            // bought nothing — the tab changes instantly now. List
+            // scrolling/flinging is untouched; this is only the tab
+            // switch itself.
             transitionSpec = {
-                val slideDirection = if (targetState > initialState) Up else Down
-                val animationSpec = spring(
-                    dampingRatio = 0.9f,
-                    stiffness = Spring.StiffnessLow,
-                    visibilityThreshold = IntOffset.VisibilityThreshold
-                )
-
                 ContentTransform(
-                    targetContentEnter = slideIntoContainer(slideDirection, animationSpec),
-                    initialContentExit = slideOutOfContainer(slideDirection, animationSpec),
+                    targetContentEnter = EnterTransition.None,
+                    initialContentExit = ExitTransition.None,
                     sizeTransform = null
                 )
             },

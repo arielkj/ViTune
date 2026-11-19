@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.MediaStore
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -67,21 +66,11 @@ import app.vitune.core.ui.utils.isCompositionLaunched
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 private val permission = if (isAtLeastAndroid13) Manifest.permission.READ_MEDIA_AUDIO
 else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -109,20 +98,20 @@ fun HomeLocalSongs(onSearchClick: () -> Unit) = with(OrderPreferences) {
         onResult = { uri -> uri?.let { LocalMusicFolders.addFolder(context, it) } }
     )
 
-    LaunchedEffect(hasPermission) {
-        if (hasPermission) {
-            // scanAll() first: it returns immediately (the scan runs in its
-            // own scope), while collect() below never returns.
-            LocalMusicFolders.scanAll(context)
-            context.musicFilesAsFlow().collect()
-        }
-    }
+    // Car build (v4.2): manual-only scanning. Nothing scans when the
+    // Local tab is opened — the library shown is the one stored in the
+    // database. Only "Volver a buscar" (and choosing a folder the first
+    // time) starts a scan, so the weak radio spends no CPU or battery on
+    // work the user did not ask for.
 
     if (hasPermission) {
         Column(modifier = Modifier.fillMaxSize()) {
             LocalFoldersBar(
                 onChooseFolder = { folderLauncher.launch(null) },
-                onRescan = { LocalMusicFolders.scanAll(context, force = true) },
+                onRescan = {
+                    LocalMusicFolders.scanAll(context, force = true)
+                    refreshMediaStoreOnce(context)
+                },
                 onRemoveFolder = { uri -> LocalMusicFolders.removeFolder(context, uri) }
             )
 
@@ -316,7 +305,9 @@ private fun LocalFolderGroupRow(
     modifier: Modifier = Modifier
 ) {
     val (colorPalette) = LocalAppearance.current
-    val coverUrl = group.coverUrl
+    // Car build (v4.2): the group row loads the pre-decoded ~200 px
+    // thumbnail, not the full cover.
+    val coverUrl = LocalMusicFolders.smallCoverUrl(LocalContext.current, group.coverUrl)
     if (coverUrl != null) {
         PlaylistItem(
             thumbnailUrl = coverUrl,
@@ -381,7 +372,7 @@ private fun LocalFoldersBar(
             SecondaryTextButton(
                 text = stringResource(R.string.rescan_music),
                 onClick = onRescan,
-                enabled = folders.isNotEmpty() && !LocalMusicFolders.isScanning
+                enabled = !LocalMusicFolders.isScanning
             )
         }
 
@@ -426,39 +417,33 @@ private fun LocalFoldersBar(
 }
 
 private val mediaScope = CoroutineScope(Dispatchers.IO + CoroutineName("MediaStore worker"))
-fun Context.musicFilesAsFlow(): StateFlow<List<Song>> = flow {
-    var version: String? = null
 
-    while (currentCoroutineContext().isActive) {
-        val newVersion = MediaStore.getVersion(applicationContext)
-
-        if (version != newVersion) {
-            version = newVersion
-
-            AudioMediaCursor.query(contentResolver) {
-                buildList {
-                    while (next()) {
-                        if (!isMusic || duration == 0) continue
-                        add(
-                            Song(
-                                id = "$LOCAL_KEY_PREFIX$id",
-                                title = name,
-                                artistsText = artist,
-                                durationText = duration.milliseconds.toComponents { minutes, seconds, _ ->
-                                    "$minutes:${seconds.toString().padStart(2, '0')}"
-                                },
-                                thumbnailUrl = albumUri.toString()
-                            )
+/**
+ * Car build (v4.2): the MediaStore complement, refreshed once and only
+ * when the user taps "Volver a buscar". It used to poll the media
+ * library every 5 seconds for as long as the Local tab was open; now
+ * nothing scans on its own — entering Local shows the stored library,
+ * and only an explicit rescan looks for new files.
+ */
+fun refreshMediaStoreOnce(context: Context) {
+    mediaScope.launch {
+        AudioMediaCursor.query(context.contentResolver) {
+            buildList {
+                while (next()) {
+                    if (!isMusic || duration == 0) continue
+                    add(
+                        Song(
+                            id = "$LOCAL_KEY_PREFIX$id",
+                            title = name,
+                            artistsText = artist,
+                            durationText = duration.milliseconds.toComponents { minutes, seconds, _ ->
+                                "$minutes:${seconds.toString().padStart(2, '0')}"
+                            },
+                            thumbnailUrl = albumUri.toString()
                         )
-                    }
+                    )
                 }
-            }?.let { emit(it) }
-        }
-        delay(5.seconds)
+            }
+        }?.let { songs -> transaction { songs.forEach(Database::insert) } }
     }
-}.distinctUntilChanged()
-    .onEach { songs -> transaction { songs.forEach(Database::insert) } }
-    // Car build: WhileSubscribed instead of Eagerly — the MediaStore poller
-    // only runs while the Local tab is actually open, instead of polling
-    // every 5 seconds for the whole life of the app once started.
-    .stateIn(mediaScope, SharingStarted.WhileSubscribed(), listOf())
+}

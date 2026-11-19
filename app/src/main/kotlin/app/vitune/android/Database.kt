@@ -800,6 +800,18 @@ interface DatabaseAccessor {
     @Query("DELETE FROM Song WHERE id LIKE :pattern ESCAPE '\\'")
     fun deleteSongsLike(pattern: String)
 
+    /**
+     * Car build (v4.2): the incremental scan needs the rows a folder
+     * already has, to keep unchanged songs (and their play counts) instead
+     * of deleting and re-inserting everything on every rescan.
+     */
+    @Query("SELECT * FROM Song WHERE id LIKE :pattern ESCAPE '\\'")
+    fun songsLike(pattern: String): List<Song>
+
+    /** Car build (v4.2): delete one batch of songs by id (removed or changed files). */
+    @Query("DELETE FROM Song WHERE id IN (:ids)")
+    fun deleteSongsByIds(ids: List<String>)
+
     @Delete
     fun delete(searchQuery: SearchQuery)
 
