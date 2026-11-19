@@ -27,8 +27,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -66,10 +66,10 @@ import app.vitune.core.ui.utils.isCompositionLaunched
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 private val permission = if (isAtLeastAndroid13) Manifest.permission.READ_MEDIA_AUDIO
@@ -90,12 +90,32 @@ fun HomeLocalSongs(onSearchClick: () -> Unit) = with(OrderPreferences) {
         onResult = { hasPermission = it }
     )
 
+    // Car build (v4.3): the Local list is a snapshot, loaded once and
+    // frozen (see LocalSongsContent). It is reloaded only when the user
+    // asks for it, so a tick bumped here is the only way the list moves.
+    var refreshTick by remember { mutableIntStateOf(0) }
+
+    // Reload once a scan finishes: the scan writes the database on its
+    // own thread, so the snapshot must be taken after it, not while it
+    // is still running.
+    val scanning = LocalMusicFolders.isScanning
+    var wasScanning by remember { mutableStateOf(false) }
+    LaunchedEffect(scanning) {
+        if (wasScanning && !scanning) refreshTick++
+        wasScanning = scanning
+    }
+
     // Car build: system folder picker (SAF). The user chooses the folder
     // with their music once; the permission is persisted, so the songs are
     // there on every launch without asking again.
     val folderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
-        onResult = { uri -> uri?.let { LocalMusicFolders.addFolder(context, it) } }
+        onResult = { uri ->
+            uri?.let {
+                LocalMusicFolders.addFolder(context, it)
+                refreshTick++
+            }
+        }
     )
 
     // Car build (v4.2): manual-only scanning. Nothing scans when the
@@ -110,13 +130,19 @@ fun HomeLocalSongs(onSearchClick: () -> Unit) = with(OrderPreferences) {
                 onChooseFolder = { folderLauncher.launch(null) },
                 onRescan = {
                     LocalMusicFolders.scanAll(context, force = true)
-                    refreshMediaStoreOnce(context)
+                    refreshMediaStoreOnce(context) { refreshTick++ }
                 },
-                onRemoveFolder = { uri -> LocalMusicFolders.removeFolder(context, uri) }
+                onRemoveFolder = { uri ->
+                    LocalMusicFolders.removeFolder(context, uri)
+                    refreshTick++
+                }
             )
 
             Box(modifier = Modifier.weight(1f)) {
-                LocalSongsContent(onSearchClick = onSearchClick)
+                LocalSongsContent(
+                    refreshTick = refreshTick,
+                    onSearchClick = onSearchClick
+                )
             }
         }
     } else {
@@ -171,22 +197,41 @@ fun HomeLocalSongs(onSearchClick: () -> Unit) = with(OrderPreferences) {
  * startup.
  */
 @Composable
-private fun LocalSongsContent(onSearchClick: () -> Unit) = with(OrderPreferences) {
-    val groups by remember(localSongSortBy, localSongSortOrder) {
-        Database.songs(
+private fun LocalSongsContent(
+    refreshTick: Int,
+    onSearchClick: () -> Unit
+) = with(OrderPreferences) {
+    // Car build (v4.3): the list is a SNAPSHOT, loaded once and frozen.
+    // The v4.2 live Flow re-emitted on every write to the songs table
+    // (a download finishing, the playing song's play count), re-ran
+    // groupSongs over the whole library and recomposed the folder list
+    // — that was the "reloads by itself" the user saw. Now the snapshot
+    // is taken once here and only again when refreshTick moves (a manual
+    // "Volver a buscar", a folder added/removed) or the sort order
+    // changes. Nothing playing, downloading or writing to the database
+    // moves this list anymore.
+    var snapshotSongs by remember { mutableStateOf<List<Song>?>(null) }
+    var groups by remember { mutableStateOf<List<LocalFolderGroup>?>(null) }
+
+    LaunchedEffect(refreshTick, localSongSortBy, localSongSortOrder) {
+        val songs = Database.songs(
             sortBy = localSongSortBy,
             sortOrder = localSongSortOrder,
             isLocal = true
-        )
-            .map { songs -> songs.filter { it.durationText != "0:00" } }
-            .map { songs -> LocalMusicFolders.groupSongs(songs, LocalMusicFolders.folders()) }
-            .flowOn(Dispatchers.Default)
-    }.collectAsState(initial = null)
+        ).first().filter { it.durationText != "0:00" }
+        val grouped = withContext(Dispatchers.Default) {
+            LocalMusicFolders.groupSongs(songs, LocalMusicFolders.folders())
+        }
+        snapshotSongs = songs
+        groups = grouped
+    }
 
     var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedGroup = groups?.find { it.key == selectedKey }
 
-    // The selected group vanished (folder removed, rescan): back to the list.
+    // The selected group vanished (folder removed, manual rescan): back
+    // to the list. With the frozen snapshot this only fires after a
+    // manual reload, never while a song plays.
     LaunchedEffect(groups) {
         if (selectedKey != null && groups != null && selectedGroup == null) selectedKey = null
     }
@@ -194,16 +239,15 @@ private fun LocalSongsContent(onSearchClick: () -> Unit) = with(OrderPreferences
     BackHandler(enabled = selectedKey != null) { selectedKey = null }
 
     val groupsValue = groups
-    when {
-        groupsValue.isNullOrEmpty() -> HomeSongs(
+    val songsValue = snapshotSongs
+    if (groupsValue == null || songsValue == null) {
+        // First load: a single local database read. Nothing to show
+        // yet, and no empty state to flash.
+        Box(modifier = Modifier.fillMaxSize())
+    } else when {
+        groupsValue.isEmpty() -> HomeSongs(
             onSearchClick = onSearchClick,
-            songProvider = {
-                Database.songs(
-                    sortBy = localSongSortBy,
-                    sortOrder = localSongSortOrder,
-                    isLocal = true
-                ).map { songs -> songs.filter { it.durationText != "0:00" } }
-            },
+            songProvider = remember(songsValue) { { flowOf(songsValue) } },
             sortBy = localSongSortBy,
             setSortBy = { localSongSortBy = it },
             sortOrder = localSongSortOrder,
@@ -424,26 +468,34 @@ private val mediaScope = CoroutineScope(Dispatchers.IO + CoroutineName("MediaSto
  * library every 5 seconds for as long as the Local tab was open; now
  * nothing scans on its own — entering Local shows the stored library,
  * and only an explicit rescan looks for new files.
+ *
+ * Car build (v4.3): [onDone] runs after the MediaStore songs are
+ * written (or if the query fails), so the frozen Local snapshot can be
+ * reloaded after the complement lands instead of before it.
  */
-fun refreshMediaStoreOnce(context: Context) {
+fun refreshMediaStoreOnce(context: Context, onDone: (() -> Unit)? = null) {
     mediaScope.launch {
-        AudioMediaCursor.query(context.contentResolver) {
-            buildList {
-                while (next()) {
-                    if (!isMusic || duration == 0) continue
-                    add(
-                        Song(
-                            id = "$LOCAL_KEY_PREFIX$id",
-                            title = name,
-                            artistsText = artist,
-                            durationText = duration.milliseconds.toComponents { minutes, seconds, _ ->
-                                "$minutes:${seconds.toString().padStart(2, '0')}"
-                            },
-                            thumbnailUrl = albumUri.toString()
+        try {
+            AudioMediaCursor.query(context.contentResolver) {
+                buildList {
+                    while (next()) {
+                        if (!isMusic || duration == 0) continue
+                        add(
+                            Song(
+                                id = "$LOCAL_KEY_PREFIX$id",
+                                title = name,
+                                artistsText = artist,
+                                durationText = duration.milliseconds.toComponents { minutes, seconds, _ ->
+                                    "$minutes:${seconds.toString().padStart(2, '0')}"
+                                },
+                                thumbnailUrl = albumUri.toString()
+                            )
                         )
-                    )
+                    }
                 }
-            }
-        }?.let { songs -> transaction { songs.forEach(Database::insert) } }
+            }?.let { songs -> transaction { songs.forEach(Database::insert) } }
+        } finally {
+            onDone?.invoke()
+        }
     }
 }
