@@ -23,7 +23,7 @@ val topLevelLibs = libs
 
 allprojects {
     group = "app.vitune"
-    version = "1.2.12"
+    version = "1.2.13"
 
     apply(plugin = "dev.detekt")
 

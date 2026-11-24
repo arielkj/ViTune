@@ -34,7 +34,7 @@ android {
         minSdk = 24
         targetSdk = 36
 
-        versionCode = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull() ?: 33
+        versionCode = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull() ?: 34
         versionName = project.version.toString()
 
         ndk {
@@ -199,7 +199,7 @@ chaquopy {
         // (AC8227L) is 32-bit ARM. yt-dlp only needs Python 3.10+.
         version = "3.11"
         pip {
-            install("yt-dlp>=2026.10.26")
+            install("yt-dlp>=2026.11.23")
             install("yt-dlp-ejs>=0.8.0")
             install("pip")
         }

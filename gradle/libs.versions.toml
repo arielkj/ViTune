@@ -1,10 +1,10 @@
 [versions]
 kotlin = "2.4.21"
-ksp = "2.3.13"
+ksp = "2.3.14"
 
 #noinspection UnusedVersionCatalogEntry
 jvm = "25"
-agp = "9.5.1"
+agp = "9.5.2"
 
 room = "2.8.5"
 media3 = "1.11.1"
@@ -33,7 +33,7 @@ kotlin_coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", 
 kotlin_datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version = "0.8.0" }
 kotlin_immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version = "0.5.2" }
 
-compose_bom = { module = "androidx.compose:compose-bom", version = "2026.09.00" }
+compose_bom = { module = "androidx.compose:compose-bom", version = "2026.11.01" }
 compose_animation = { module = "androidx.compose.animation:animation" }
 compose_foundation = { module = "androidx.compose.foundation:foundation" }
 compose_ui = { module = "androidx.compose.ui:ui" }
@@ -79,7 +79,7 @@ log4j = { module = "org.apache.logging.log4j:log4j-api", version = "2.26.1" }
 slf4j = { module = "org.slf4j:slf4j-api", version = "2.0.20" }
 logback = { module = "com.github.tony19:logback-android", version = "3.0.0" }
 
-brotli = { module = "org.brotli:dec", version = "1.2.1-unstable-2026-10-28" }
+brotli = { module = "org.brotli:dec", version = "1.2.1-unstable-2026-11-20" }
 palette = { module = "androidx.palette:palette", version = "1.1.0" }
 monet = { module = "com.github.KieronQuinn:MonetCompat", version = "0.4.1" }
 
