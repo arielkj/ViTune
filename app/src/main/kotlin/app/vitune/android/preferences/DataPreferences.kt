@@ -28,7 +28,10 @@ object DataPreferences : GlobalPreferencesHolder() {
     val topListPeriodProperty = enum(TopListPeriod.AllTime)
     var topListPeriod by topListPeriodProperty
     var versionCheckPeriod by enum(VersionCheckPeriod.Off)
-    var autoSyncPlaylists by boolean(true)
+    // Car build (v4.5): manual-only by default. Auto-sync used to fire a
+    // network sync (which could hang forever) every time a YouTube playlist
+    // was opened. The user can turn it back on in Ajustes if wanted.
+    var autoSyncPlaylists by boolean(false)
 
     enum class TopListPeriod(
         val displayName: @Composable () -> String,

@@ -45,6 +45,7 @@
     <string name="like">Like</string>
     <string name="shuffle">Shuffle</string>
     <string name="sync">Sync</string>
+    <string name="sync_failed">Sync failed, check your internet connection</string>
     <string name="start_radio">Start radio</string>
     <string name="play_next">Play next</string>
     <string name="enqueue">Enqueue</string>

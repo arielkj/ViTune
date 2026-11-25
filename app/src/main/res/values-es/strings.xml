@@ -45,6 +45,7 @@
     <string name="like">Me gusta</string>
     <string name="shuffle">Aleatorio</string>
     <string name="sync">Sincronizar</string>
+    <string name="sync_failed">No se pudo sincronizar, revisa el internet</string>
     <string name="start_radio">Iniciar radio</string>
     <string name="play_next">Reproducir siguiente</string>
     <string name="enqueue">Añadir a la cola</string>

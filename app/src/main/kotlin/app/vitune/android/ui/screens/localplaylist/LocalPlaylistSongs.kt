@@ -106,7 +106,10 @@ fun LocalPlaylistSongs(
     LaunchedEffect(Unit) {
         if (DataPreferences.autoSyncPlaylists) playlist.browseId?.let { browseId ->
             loading = true
-            sync(playlist, browseId)
+            // Car build (v4.5): surface sync failure instead of spinning forever.
+            sync(playlist, browseId).onFailure {
+                context.toast(context.getString(R.string.sync_failed))
+            }
             loading = false
         }
     }
@@ -203,7 +206,13 @@ fun LocalPlaylistSongs(
                                                         menuState.hide()
                                                         coroutineScope.launch {
                                                             loading = true
-                                                            sync(playlist, browseId)
+                                                            // Car build (v4.5): surface sync failure
+                                                            // instead of spinning forever.
+                                                            sync(playlist, browseId).onFailure {
+                                                                context.toast(
+                                                                    context.getString(R.string.sync_failed)
+                                                                )
+                                                            }
                                                             loading = false
                                                         }
                                                     }

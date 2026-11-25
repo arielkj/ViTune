@@ -7,6 +7,7 @@ import app.vitune.providers.innertube.models.Thumbnail
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpResponseValidator
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.compression.ContentEncoding
@@ -69,6 +70,17 @@ object Innertube {
             brotli(1.0f)
             gzip(0.9f)
             deflate(0.8f)
+        }
+
+        // Car build (v4.5): finite timeouts. No timeout was configured at all,
+        // so a stalled connection hung playlist sync forever (the spinner kept
+        // spinning, the button stayed disabled, nothing ever failed). Values
+        // are generous for the slow car radio, but a stall must now fail
+        // instead of hanging indefinitely.
+        install(HttpTimeout) {
+            connectTimeoutMillis = 10_000
+            requestTimeoutMillis = 30_000
+            socketTimeoutMillis = 30_000
         }
 
         install(Logging) {
