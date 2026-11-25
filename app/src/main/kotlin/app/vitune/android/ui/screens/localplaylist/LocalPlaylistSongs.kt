@@ -329,7 +329,7 @@ fun LocalPlaylistSongs(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 // Car build: per-song download state.
-                                DownloadStateIcon(mediaId = song.id)
+                                DownloadStateIcon(mediaItem = song.asMediaItem)
                                 ReorderHandle(
                                     reorderingState = reorderingState,
                                     index = index

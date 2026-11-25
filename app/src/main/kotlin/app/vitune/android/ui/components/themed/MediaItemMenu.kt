@@ -756,7 +756,12 @@ fun MediaItemMenu(
                             context = context.applicationContext,
                             mediaItem = mediaItem
                         )
-                    }.exceptionOrNull()?.printStackTrace()
+                    }.exceptionOrNull()?.let {
+                        // Car build (v4.6): a failed enqueue must tell the
+                        // user instead of failing silently.
+                        it.printStackTrace()
+                        context.toast(context.getString(R.string.error_pre_cache))
+                    }
                 }
             )
 

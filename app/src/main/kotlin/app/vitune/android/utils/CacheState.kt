@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -40,6 +41,7 @@ import app.vitune.android.service.LOCAL_KEY_PREFIX
 import app.vitune.android.service.PlayerService
 import app.vitune.android.service.PrecacheService
 import app.vitune.android.service.downloadState
+import app.vitune.android.service.downloadingSongIds
 import app.vitune.android.ui.components.themed.CircularProgressIndicator
 import app.vitune.android.ui.components.themed.HeaderIconButton
 import app.vitune.android.ui.components.themed.LinearProgressIndicator
@@ -171,27 +173,29 @@ fun PlaylistDownloadProgress(
 }
 
 /**
- * Car build: per-song download state icon for playlist rows. A check mark
- * when the song is downloaded, a spinner while a download is running and
- * this song is not downloaded yet, nothing otherwise.
+ * Car build (v4.6): per-song download button for playlist rows. A download
+ * icon when the song is not downloaded yet — tapping it downloads only that
+ * song; a spinner only while THAT song is downloading; a check mark when it
+ * is downloaded. Local songs are already on the device and always show the
+ * check mark. The spinner used to key on the global downloadState flag, so
+ * every undownloaded row spun while any one song downloaded.
  */
 @Composable
 fun DownloadStateIcon(
-    mediaId: String,
+    mediaItem: MediaItem,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val (colorPalette) = LocalAppearance.current
-    val isDownloading by downloadState.collectAsState()
 
-    var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(isDownloading) {
-        while (isDownloading) {
-            delay(1.seconds)
-            tick++
-        }
-    }
+    val mediaId = mediaItem.mediaId
+    val downloadingIds by downloadingSongIds.collectAsState()
+    val isThisSongDownloading = mediaId in downloadingIds
 
-    val cached = isCached(mediaId = mediaId, key = tick)
+    // Re-check the cache when this song stops downloading: that is when its
+    // content lands in the cache and the check mark should appear.
+    val cached = isCached(mediaId = mediaId, key = isThisSongDownloading)
+
     when {
         cached -> Image(
             painter = painterResource(R.drawable.download_done),
@@ -200,7 +204,26 @@ fun DownloadStateIcon(
             modifier = modifier.size(18.dp)
         )
 
-        isDownloading -> CircularProgressIndicator(modifier = modifier.size(18.dp))
+        isThisSongDownloading -> CircularProgressIndicator(modifier = modifier.size(18.dp))
+
+        else -> Image(
+            painter = painterResource(R.drawable.download),
+            contentDescription = stringResource(R.string.pre_cache),
+            colorFilter = ColorFilter.tint(colorPalette.text),
+            modifier = modifier
+                .size(18.dp)
+                .clickable {
+                    runCatching {
+                        PrecacheService.scheduleCache(
+                            context = context.applicationContext,
+                            mediaItem = mediaItem
+                        )
+                    }.exceptionOrNull()?.let {
+                        it.printStackTrace()
+                        context.toast(context.getString(R.string.error_pre_cache))
+                    }
+                }
+        )
     }
 }
 

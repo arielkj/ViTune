@@ -34,7 +34,7 @@ android {
         minSdk = 24
         targetSdk = 36
 
-        versionCode = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull() ?: 35
+        versionCode = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull() ?: 36
         versionName = project.version.toString()
 
         ndk {

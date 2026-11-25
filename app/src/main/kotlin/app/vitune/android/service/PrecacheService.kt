@@ -67,6 +67,14 @@ private val coroutineScope = CoroutineScope(
 private val mutableDownloadState = MutableStateFlow(false)
 val downloadState = mutableDownloadState.asStateFlow()
 
+// Car build (v4.6): per-song downloading state. The rows used to key their
+// spinner on the global downloadState boolean, so while any one song
+// downloaded, EVERY not-yet-downloaded row showed a spinner. This set holds
+// the mediaIds of the songs currently queued or downloading, so each row can
+// show its own state. The request id is the mediaId (see scheduleCache).
+private val mutableDownloadingSongIds = MutableStateFlow<Set<String>>(emptySet())
+val downloadingSongIds = mutableDownloadingSongIds.asStateFlow()
+
 private const val DOWNLOAD_NOTIFICATION_UPDATE_INTERVAL = 1000L // default
 private const val DOWNLOAD_WORK_NAME = "precacher-work"
 
@@ -197,21 +205,55 @@ class PrecacheService : DownloadService(
 
             addListener(
                 object : DownloadManager.Listener {
-                    override fun onIdle(downloadManager: DownloadManager) =
+                    override fun onIdle(downloadManager: DownloadManager) {
                         mutableDownloadState.update { false }
+                        // Car build (v4.6): idle means nothing is queued or
+                        // downloading, so the per-song set must be empty too.
+                        mutableDownloadingSongIds.update { emptySet() }
+                    }
 
                     override fun onDownloadChanged(
                         downloadManager: DownloadManager,
                         download: Download,
                         finalException: Exception?
-                    ) = downloadQueue.trySend(downloadManager).let { }
+                    ) {
+                        // Car build (v4.6): keep the per-song downloading
+                        // set in sync, so a row spins only while THAT song
+                        // is queued or downloading. A stopped, completed,
+                        // failed or removed download leaves the set, and
+                        // its row goes back to showing the download button
+                        // (so the user can retry a failed one).
+                        val id = download.request.id
+                        when (download.state) {
+                            Download.STATE_QUEUED,
+                            Download.STATE_DOWNLOADING,
+                            Download.STATE_RESTARTING ->
+                                mutableDownloadingSongIds.update { it + id }
+
+                            else -> mutableDownloadingSongIds.update { it - id }
+                        }
+                        downloadQueue.trySend(downloadManager).let { }
+                    }
 
                     override fun onDownloadRemoved(
                         downloadManager: DownloadManager,
                         download: Download
-                    ) = downloadQueue.trySend(downloadManager).let { }
+                    ) {
+                        mutableDownloadingSongIds.update { it - download.request.id }
+                        downloadQueue.trySend(downloadManager).let { }
+                    }
                 }
             )
+
+            // Car build (v4.6): seed the per-song set with downloads that
+            // are already queued or running (e.g. resumed after a restart),
+            // so rows show the right state from the start.
+            currentDownloads.forEach { download ->
+                if (download.state == Download.STATE_QUEUED ||
+                    download.state == Download.STATE_DOWNLOADING ||
+                    download.state == Download.STATE_RESTARTING
+                ) mutableDownloadingSongIds.update { it + download.request.id }
+            }
         }
     }
 
